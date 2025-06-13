@@ -1,20 +1,35 @@
 from typing import List, Union, Optional
+from pydantic import EmailStr
 
 from fastapi import FastAPI, status, HTTPException, Path, Query
 import uvicorn
 
-from models import User
-
+from models import User, Order
 
 users: List[User] = []
 
 app = FastAPI()
+db = {}
 
 
-@app.post("users/", status_code=status.HTTP_201_CREATED, response_model=User)
-async def add_user(user_model: User):
-    users.append(user_model)
-    return user_model
+@app.post("/orders/", response_model=Order)
+def create_order(order: Order):
+    if order.email in db:
+        raise HTTPException(400, "Замовлення з таким Email вже існує.")
+    db[order.email] = order
+    return order
+
+@app.get("/orders/{email}", response_model=Order)
+def get_order(email: EmailStr):
+    if email not in db:
+        raise HTTPException(404, "Не знайдено.")
+    return db[email]
+
+
+@app.post("/users/", status_code=status.HTTP_201_CREATED, response_model=User)
+async def add_user(user: User):
+    users.append(user)
+    return user
 
 
 @app.get("/users/", status_code=status.HTTP_202_ACCEPTED, response_model=List[User])
@@ -23,7 +38,7 @@ async def get_users():
 
 
 @app.get("/users/{full_name}/", status_code=status.HTTP_201_CREATED, response_model=User)
-async def get_user(full_name: str = Path(..., examples=["Вася Пупкін"])):
+async def get_user(full_name: str = Path(..., example='Вася Пупкін')):
     user = next((user for user in users if user.full_name == full_name), None)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="такого користувача не знайдено")
@@ -35,6 +50,7 @@ async def remove_user(full_name: str = Query(...)):
     user = next((user for user in users if user.full_name == full_name), None)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Такого користувача не знайдено")
+    users.remove(user)
     return None
 
 
